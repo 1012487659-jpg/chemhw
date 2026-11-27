@@ -5286,12 +5286,50 @@ function openExamForm(exam) {
   });
 }
 
-function exportExamCSV() {
+function openExamExport() {
   const exam = curExam();
   if (!exam) { toast('请先新建一次考试', 'bad'); return; }
-  const list = classStudents();
+  const st = examNumbers();
+  const body =
+    '<div class="hint" style="margin-top:0">已录 ' + st.recorded + '/' + st.total + ' 人。选择导出顺序：</div>' +
+    '<button class="exp-opt" data-mode="no" style="margin-top:10px">' +
+      '<div class="t">按学号顺序</div>' +
+      '<div class="d">按班级名单学号排列，和成绩名单默认视图一致。</div>' +
+    '</button>' +
+    '<button class="exp-opt" data-mode="high">' +
+      '<div class="t">按分数从高到低</div>' +
+      '<div class="d">分数高的排前面，同分按学号；缺考、未登记排在末尾。</div>' +
+    '</button>' +
+    '<button class="exp-opt" data-mode="low">' +
+      '<div class="t">按分数从低到高</div>' +
+      '<div class="d">分数低的排前面，同分按学号；缺考、未登记排在末尾。</div>' +
+    '</button>';
+  const close = openSheet('导出成绩', body, root => {
+    root.querySelectorAll('.exp-opt[data-mode]').forEach(b => {
+      b.onclick = () => { close(); exportExamCSV(b.dataset.mode); };
+    });
+  });
+}
+
+function exportExamCSV(mode) {
+  const exam = curExam();
+  if (!exam) { toast('请先新建一次考试', 'bad'); return; }
+  let list = classStudents();
   if (!list.length) { toast('当前班级没有学生', 'bad'); return; }
   const rankMap = examRankMap();
+  const scoreVal = s => {
+    const r = scoreOf(s.id);
+    return r && !r.absent && isFinite(r.score) ? Number(r.score) : null;
+  };
+  if (mode === 'high' || mode === 'low') {
+    const dir = mode === 'high' ? -1 : 1;
+    list = list.slice().sort((a, b) => {
+      const va = scoreVal(a), vb = scoreVal(b);
+      if (va == null !== (vb == null)) return va == null ? 1 : -1; // 缺考/未登记永远在末尾
+      if (va != null && va !== vb) return (va - vb) * dir;
+      return a.no - b.no;                                         // 同分按学号
+    });
+  }
   const rows = [['序号', '姓名', '分数', '状态', '名次', '考试名称', '满分', '考试日期']];
   list.forEach(s => {
     const r = scoreOf(s.id);
@@ -5315,9 +5353,10 @@ function exportExamCSV() {
     '缺考', st.absents]);
 
   const cls = curClass();
-  const name = safeName((cls ? cls.name : '班级') + '_' + exam.name + '_成绩_' + todayStr()) + '.csv';
+  const suffix = mode === 'high' ? '_分数降序' : mode === 'low' ? '_分数升序' : '';
+  const name = safeName((cls ? cls.name : '班级') + '_' + exam.name + '_成绩' + suffix + '_' + todayStr()) + '.csv';
   download(name, toCSV(rows));
-  toast('成绩表已导出', 'ok');
+  toast('成绩表已导出' + suffix, 'ok');
 }
 
 /* ---------------------------------------------------------------
@@ -6812,7 +6851,7 @@ function bindEvents() {
   $('#examUndoBtn').addEventListener('click', () => undoExam());
   $('#examImportBtn').addEventListener('click', openScoreImport);
   $('#examTrendBtn').addEventListener('click', openTrendPicker);
-  $('#examExportBtn').addEventListener('click', exportExamCSV);
+  $('#examExportBtn').addEventListener('click', openExamExport);
   $('#examClearBtn').addEventListener('click', clearExamScores);
   $('#examVoiceHelp').addEventListener('click', openScoreHelp);
   $('#examSortSeg').addEventListener('click', e => {
